@@ -36,9 +36,10 @@ class TorControlProxyHandler(asynchat.async_chat):
         elif self.authenticated:
             if command[0].lower() == 'getinfo':
                 if command[1] == 'net/listeners/socks':
-                    # send a fake response, as TBB has no reason to know
-                    self.send(
+                    # send a fake response to make TBB happy
+                    self.push(
                         b'250-net/listeners/socks="192.168.100.1:9050"\r\n')
+                    self.send_reply(250, 'OK')
                 elif command[1] == 'status/bootstrap-phase':
                     self.pass_message('GETINFO status/bootstrap-phase')
                 else:
@@ -68,11 +69,11 @@ class TorControlProxyHandler(asynchat.async_chat):
 
     def pass_message(self, msg):
         self.controller.authenticate()
-        self.send(self.controller.msg(msg).raw_content(get_bytes=True))
+        self.push(self.controller.msg(msg).raw_content(get_bytes=True))
 
     def send_reply(self, code, msg):
         out = "{0} {1}\r\n".format(code, msg)
-        self.send(out.encode('utf-8'))
+        self.push(out.encode('utf-8'))
 
 
 class TorControlProxyServer(asyncore.dispatcher):
