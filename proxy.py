@@ -12,7 +12,7 @@ class TorControlProxyHandler(asynchat.async_chat):
         super().__init__(*args, **kwargs)
 
         self.ibuffer = []
-        self.set_terminator(b"\r\n")
+        self.set_terminator(b"\n")
         self.controller = stem.control.Controller.from_port(port=9051)
 
     def collect_incoming_data(self, data):
@@ -85,6 +85,7 @@ class TorControlProxyServer(asyncore.dispatcher):
         self.listen(5)
 
     def handle_accepted(self, sock, addr):
+        print("Got connection from {}".format(addr))
         handler = TorControlProxyHandler(sock)
 
 
