@@ -63,7 +63,7 @@ class TorControlProxyHandler(asynchat.async_chat):
             elif command[0].lower() == 'signal':
                 signal_code = self.get_next_argument(command)
                 if signal_code.lower() == 'newnym':
-                    self.pass_message('SIGNAL newnym')
+                    self.pass_message('SIGNAL NEWNYM')
                 else:
                     self.send_reply(
                         552,
