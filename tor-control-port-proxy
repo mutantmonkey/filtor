@@ -9,20 +9,21 @@
 
 import asyncore
 import asynchat
+import binascii
 import shlex
-import stem.control
-import socketserver
+import socket
 
 
 class TorControlProxyHandler(asynchat.async_chat):
     authenticated = False
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, control_socket, auth_cookie_path, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.control_socket = control_socket
+        self.auth_cookie_path = auth_cookie_path
         self.ibuffer = []
         self.set_terminator(b"\n")
-        self.controller = stem.control.Controller.from_port(port=9051)
 
     def collect_incoming_data(self, data):
         """Buffer the data."""
@@ -73,12 +74,36 @@ class TorControlProxyHandler(asynchat.async_chat):
             self.send_reply(514, 'Authentication required.')
 
     def close(self):
-        self.controller.close()
         super().close()
 
     def pass_message(self, msg):
-        self.controller.authenticate()
-        self.push(self.controller.msg(msg).raw_content(get_bytes=True))
+        # read auth cookie
+        with open(self.auth_cookie_path, 'rb') as f:
+            auth_cookie = f.read(32)
+            hex_cookie = str(binascii.hexlify(auth_cookie), 'ascii')
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(10.0)
+        sock.connect(self.control_socket)
+
+        readh = sock.makefile('r')
+        writeh = sock.makefile('w')
+
+        # authenticate
+        writeh.write("AUTHENTICATE {}\n".format(hex_cookie))
+        writeh.flush()
+        result = readh.readline()
+        if not result.strip() == "250 OK":
+            self.push(result)
+            sock.close()
+            return
+
+        writeh.write("{}\n".format(msg))
+        writeh.flush()
+
+        answer = sock.recv(16384)
+        self.push(answer)
+        sock.close()
 
     def send_reply(self, code, msg):
         out = "{0} {1}\r\n".format(code, msg)
@@ -86,8 +111,13 @@ class TorControlProxyHandler(asynchat.async_chat):
 
 
 class TorControlProxyServer(asyncore.dispatcher):
-    def __init__(self, host, port):
+    def __init__(self, host, port, control_socket="/run/tor/control",
+                 auth_cookie_path="/run/tor/control.authcookie"):
         super().__init__()
+
+        self.control_socket = control_socket
+        self.auth_cookie_path = auth_cookie_path
+
         self.create_socket()
         self.set_reuse_addr()
         self.bind((host, port))
@@ -95,7 +125,8 @@ class TorControlProxyServer(asyncore.dispatcher):
 
     def handle_accepted(self, sock, addr):
         print("Got connection from {}".format(addr))
-        handler = TorControlProxyHandler(sock)
+        handler = TorControlProxyHandler(self.control_socket,
+                                         self.auth_cookie_path, sock)
 
 
 if __name__ == '__main__':
