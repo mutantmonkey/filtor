@@ -36,8 +36,12 @@ your Torified VMs.
    tor-control-port-proxy.service to /etc/systemd/system. (If you're not using
    systemd, you'll need to write your own initscript.)
 
-2. Configure Tor: set `ControlSocket /run/tor/control` and
-   `CookieAuthentication 1`. Then restart Tor.
+2. Configure Tor; set the following options (and restart if necessary):
+   ```
+   ControlSocket /run/tor/control
+   CookieAuthentication 1
+   CookieAuthFile /run/tor/control.authcookie
+   ```
 
 3. Start the proxy: `sudo systemctl start tor-control-port-proxy.service`.
 
