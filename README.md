@@ -31,7 +31,7 @@ your Torified VMs.
 * Python 3+
 
 ## Usage
-1. Install the proxy. Arch users can use the included PKGBUILD; other users
+1. Install the proxy. Arch users can find a PKGBUILD in the AUR; other users
    should copy tor-control-port-proxy to /usr/bin, and
    tor-control-port-proxy.service to /etc/systemd/system. (If you're not using
    systemd, you'll need to write your own initscript.)
