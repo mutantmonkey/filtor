@@ -31,6 +31,10 @@ your Torified VMs.
 * Python 3+
 
 ## Usage
+Note: if you already have Tor's control port running on port 9051
+(`ControlPort 9051`), you can use tor-control-port-proxy's -p option to change
+the port.
+
 1. Install the proxy. Arch users can find a PKGBUILD in the AUR; other users
    should copy tor-control-port-proxy to /usr/bin, and
    tor-control-port-proxy.service to /etc/systemd/system. (If you're not using
@@ -45,5 +49,5 @@ your Torified VMs.
 
 3. Start the proxy: `sudo systemctl start tor-control-port-proxy.service`.
 
-4. Use port 9052 to access the control port; for example, start the Tor Browser
-   like this: `env TOR_CONTROL_PORT=9052 /usr/bin/torbrowser`.
+4. Use port 9051 to access the control port; for example, start the Tor Browser
+   like this: `env TOR_CONTROL_PORT=9051 /usr/bin/torbrowser`.

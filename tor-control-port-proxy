@@ -7,6 +7,7 @@
 # To Public License, Version 2, as published by Sam Hocevar. See
 # the COPYING file for more details.
 
+import argparse
 import asyncore
 import asynchat
 import binascii
@@ -139,5 +140,11 @@ class TorControlProxyServer(asyncore.dispatcher):
 
 
 if __name__ == '__main__':
-    server = TorControlProxyServer('0.0.0.0', 9052)
+    parser = argparse.ArgumentParser(description="Tor control port proxy")
+    parser.add_argument(
+        "--port", "-p", default=9052, type=int,
+        help="The TCP port to run the proxy on; default 9052")
+    args = parser.parse_args()
+
+    server = TorControlProxyServer('0.0.0.0', args.port)
     asyncore.loop()
