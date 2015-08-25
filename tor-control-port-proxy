@@ -142,8 +142,8 @@ class TorControlProxyServer(asyncore.dispatcher):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Tor control port proxy")
     parser.add_argument(
-        "--port", "-p", default=9052, type=int,
-        help="The TCP port to run the proxy on; default 9052")
+        "--port", "-p", default=9051, type=int,
+        help="The TCP port to run the proxy on; default 9051")
     args = parser.parse_args()
 
     server = TorControlProxyServer('0.0.0.0', args.port)
