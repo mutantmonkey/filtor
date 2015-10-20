@@ -54,8 +54,8 @@ class TorControlProxyHandler(asynchat.async_chat):
                 if info_key == 'net/listeners/socks':
                     # send a fake response to make TBB happy
                     self.push('250-net/listeners/socks="{0}:{1}"\r\n'.format(
-                        self.socket.getsockname()[0]).encode('utf-8'),
-                        self.socks_port)
+                        self.socket.getsockname()[0],
+                        self.socks_port).encode('utf-8'))
                     self.send_reply(250, 'OK')
                 elif info_key == 'status/bootstrap-phase':
                     self.pass_message('GETINFO status/bootstrap-phase')
@@ -123,10 +123,12 @@ class TorControlProxyHandler(asynchat.async_chat):
 
 
 class TorControlProxyServer(asyncore.dispatcher):
-    def __init__(self, host, port, control_socket="/run/tor/control",
+    def __init__(self, host, port, socks_port,
+                 control_socket="/run/tor/control",
                  auth_cookie_path="/run/tor/control.authcookie"):
         super().__init__()
 
+        self.socks_port = socks_port
         self.control_socket = control_socket
         self.auth_cookie_path = auth_cookie_path
 
@@ -138,7 +140,9 @@ class TorControlProxyServer(asyncore.dispatcher):
     def handle_accepted(self, sock, addr):
         print("Got connection from {}".format(addr))
         handler = TorControlProxyHandler(self.control_socket,
-                                         self.auth_cookie_path, sock)
+                                         self.auth_cookie_path,
+                                         self.socks_port,
+                                         sock)
 
 
 if __name__ == '__main__':
@@ -151,5 +155,6 @@ if __name__ == '__main__':
         help="The value for SocksPort to report to clients; default 9150")
     args = parser.parse_args()
 
-    server = TorControlProxyServer('0.0.0.0', args.port)
+    server = TorControlProxyServer('0.0.0.0', args.port,
+                                   socks_port=args.socksport)
     asyncore.loop()
