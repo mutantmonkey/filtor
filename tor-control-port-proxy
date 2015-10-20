@@ -18,11 +18,12 @@ import socket
 class TorControlProxyHandler(asynchat.async_chat):
     authenticated = False
 
-    def __init__(self, control_socket, auth_cookie_path, *args, **kwargs):
+    def __init__(self, control_socket, auth_cookie_path, socks_port=9150, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.control_socket = control_socket
         self.auth_cookie_path = auth_cookie_path
+        self.socks_port = socks_port
         self.ibuffer = []
         self.set_terminator(b"\n")
 
@@ -52,8 +53,9 @@ class TorControlProxyHandler(asynchat.async_chat):
                 info_key = self.get_next_argument(command)
                 if info_key == 'net/listeners/socks':
                     # send a fake response to make TBB happy
-                    self.push('250-net/listeners/socks="{}:9050"\r\n'.format(
-                        self.socket.getsockname()[0]).encode('utf-8'))
+                    self.push('250-net/listeners/socks="{0}:{1}"\r\n'.format(
+                        self.socket.getsockname()[0]).encode('utf-8'),
+                        self.socks_port)
                     self.send_reply(250, 'OK')
                 elif info_key == 'status/bootstrap-phase':
                     self.pass_message('GETINFO status/bootstrap-phase')
@@ -142,8 +144,11 @@ class TorControlProxyServer(asyncore.dispatcher):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Tor control port proxy")
     parser.add_argument(
-        "--port", "-p", default=9051, type=int,
-        help="The TCP port to run the proxy on; default 9051")
+        "--port", "-p", default=9151, type=int,
+        help="The TCP port to run the proxy on; default 9151")
+    parser.add_argument(
+        "--socksport", "-s", default=9150, type=int,
+        help="The value for SocksPort to report to clients; default 9150")
     args = parser.parse_args()
 
     server = TorControlProxyServer('0.0.0.0', args.port)
