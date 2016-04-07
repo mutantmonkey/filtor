@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-# Copyright © 2014 mutantmonkey <mutantmonkey@mutantmonkey.in>
+# Copyright © 2014-2016 mutantmonkey <mutantmonkey@mutantmonkey.in>
 # This program is free software. It comes without any warranty, to
 # the extent permitted by applicable law. You can redistribute it
 # and/or modify it under the terms of the Do What The Fuck You Want
@@ -21,11 +21,15 @@ class TorControlProxyHandler(asynchat.async_chat):
     def __init__(self, control_socket, auth_cookie_path, socks_port=9150, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.control_socket = control_socket
+        self.control_socket_path = control_socket
         self.auth_cookie_path = auth_cookie_path
         self.socks_port = socks_port
         self.ibuffer = []
         self.set_terminator(b"\n")
+
+        self.control_socket = None
+        self.proxy_authenticated = False
+        self.control_authenticated = False
 
     def collect_incoming_data(self, data):
         """Buffer the data."""
@@ -43,13 +47,27 @@ class TorControlProxyHandler(asynchat.async_chat):
 
         if command[0].lower() == 'authenticate':
             # we do the authentication later, as it's not needed yet
-            self.authenticated = True
+            self.proxy_authenticated = True
             self.send_reply(250, 'OK')
+        elif command[0].lower() == 'protocolinfo':
+            self.pass_message(' '.join(command))
         elif command[0].lower() == 'quit':
             self.send_reply(250, 'closing connection')
             self.close()
-        elif self.authenticated:
-            if command[0].lower() == 'getinfo':
+        elif self.proxy_authenticated:
+            if command[0].lower() == 'add_onion':
+                self.pass_message(' '.join(command))
+            elif command[0].lower() == 'del_onion':
+                self.pass_message(' '.join(command))
+            elif command[0].lower() == 'getconf':
+                conf_key = self.get_next_argument(command)
+                if conf_key.lower() == 'disablenetwork':
+                    self.pass_message('GETCONF DisableNetwork')
+                else:
+                    self.send_reply(
+                        552,
+                        "Unrecognized configuration key \"{}\"".format(conf_key))
+            elif command[0].lower() == 'getinfo':
                 info_key = self.get_next_argument(command)
                 if info_key == 'net/listeners/socks':
                     # send a fake response to make TBB happy
@@ -57,12 +75,20 @@ class TorControlProxyHandler(asynchat.async_chat):
                         self.socket.getsockname()[0],
                         self.socks_port).encode('utf-8'))
                     self.send_reply(250, 'OK')
-                elif info_key == 'status/bootstrap-phase':
-                    self.pass_message('GETINFO status/bootstrap-phase')
+                elif info_key in ('status/bootstrap-phase', 'status/circuit-established'):
+                    self.pass_message('GETINFO {}'.format(info_key))
                 else:
                     self.send_reply(
                         510,
                         'Unrecognized key "{}"'.format(info_key))
+            elif command[0].lower() == 'setevents':
+                event_key = self.get_next_argument(command)
+                if event_key.lower() == 'status_client':
+                    self.pass_message('SETEVENTS STATUS_CLIENT')
+                else:
+                    self.send_reply(
+                        552,
+                        "Unrecognized event \"{}\"".format(event_key))
             elif command[0].lower() == 'signal':
                 signal_code = self.get_next_argument(command)
                 if signal_code.lower() == 'newnym':
@@ -78,6 +104,12 @@ class TorControlProxyHandler(asynchat.async_chat):
         else:
             self.send_reply(514, 'Authentication required.')
 
+    def handle_close(self):
+        if self.control_socket is not None:
+            self.control_socket.close()
+
+        super().handle_close()
+
     def close(self):
         super().close()
 
@@ -88,38 +120,55 @@ class TorControlProxyHandler(asynchat.async_chat):
         else:
             return ""
 
-    def pass_message(self, msg):
+    def create_control_socket(self):
+        self.control_socket = TorControlSocket(self.control_socket_path)
+
+    def authenticate(self):
         # read auth cookie
         with open(self.auth_cookie_path, 'rb') as f:
             auth_cookie = f.read(32)
             hex_cookie = str(binascii.hexlify(auth_cookie), 'ascii')
 
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(10.0)
-        sock.connect(self.control_socket)
-
-        readh = sock.makefile('r')
-        writeh = sock.makefile('w')
-
-        # authenticate
-        writeh.write("AUTHENTICATE {}\n".format(hex_cookie))
-        writeh.flush()
-        result = readh.readline()
-        if not result.strip() == "250 OK":
+        result = self.control_socket.send_command(
+            "AUTHENTICATE {}\n".format(hex_cookie))
+        if result[0:6] != b"250 OK":
             self.push(result)
-            sock.close()
-            return
+            self.control_socket.close()
+            self.control_socket = None
+            return False
 
-        writeh.write("{}\n".format(msg))
-        writeh.flush()
+        return True
 
-        answer = sock.recv(16384)
-        self.push(answer)
-        sock.close()
+    def pass_message(self, msg):
+        if self.control_socket is None:
+            self.create_control_socket()
+
+        if self.control_authenticated is False:
+            self.control_authenticated = self.authenticate()
+            if self.control_authenticated is False:
+                self.close()
+                return
+
+        result = self.control_socket.send_command(msg)
+        self.push(result)
 
     def send_reply(self, code, msg):
         out = "{0} {1}\r\n".format(code, msg)
         self.push(out.encode('utf-8'))
+
+
+class TorControlSocket(object):
+    def __init__(self, path):
+        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.socket.settimeout(10.0)
+        self.socket.connect(path)
+
+    def send_command(self, msg):
+        self.socket.send("{}\r\n".format(msg).encode('utf-8'))
+        return self.socket.recv(16384)
+
+    def close(self):
+        self.socket.close()
 
 
 class TorControlProxyServer(asyncore.dispatcher):
