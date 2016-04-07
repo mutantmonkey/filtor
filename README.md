@@ -9,11 +9,9 @@ configured to use Tor correctly and send a NEWNYM signal when the "New
 Identity" button is clicked.
 
 While these are nice features to have, exposing the control port to the browser
-results in an increased attack surface, particularly when the Tor daemon and
-Tor Browser are run on separate machines such as in Qubes. For example, an
-attacker could tamper with the Tor configuration to only use relays that he or
-she controls or get the IP address of the machine running Tor by using the
-`GETINFO address` command.
+results in an increased attack surface. For example, an attacker could tamper
+with the Tor configuration to only use relays that they control or obtain the
+IP address of the machine running Tor by using the `GETINFO address` command.
 
 Inspired by a [similar project written as part of
 Whonix](https://www.whonix.org/wiki/Dev/Control_Port_Filter_Proxy), I wrote a
@@ -21,18 +19,18 @@ simple proxy that only allows commands necessary for operation of the Tor
 Browser and rejects all others.
 
 Note that this simple proxy does not enforce authentication; I do not believe
-there are anonymity concerns with this, but this does present an increased
-attack risk if someone compromises a user account on your machine. In the
-future, I may add support for a separate auth cookie for the proxy itself, so
-that authentication can be used without exposing the main Tor auth cookie to
-your Torified VMs.
+there are significant anonymity concerns with this, but this does present an
+increased attack risk if someone compromises a user account on your machine. In
+the future, I may add support for a separate auth cookie for the proxy itself,
+so that authentication can be used without exposing the main Tor auth cookie
+to your Torified VMs.
 
 ## Prerequisites
 * Python 3+
 
 ## Usage
-Note: if you already have Tor's control port running on port 9051
-(`ControlPort 9051`), you can use tor-control-port-proxy's -p option to change
+Note: if you already have Tor's control port running on port 9151
+(`ControlPort 9151`), you can use tor-control-port-proxy's -p option to change
 the port.
 
 1. Install the proxy. Arch users can find a PKGBUILD in the AUR; other users
@@ -48,6 +46,3 @@ the port.
    ```
 
 3. Start the proxy: `sudo systemctl start tor-control-port-proxy.service`.
-
-4. Use port 9051 to access the control port; for example, start the Tor Browser
-   like this: `env TOR_CONTROL_PORT=9051 /usr/bin/torbrowser`.
