@@ -1,4 +1,4 @@
-# tor-control-port-proxy
+# filtor
 
 A whitelisting proxy for the Tor control port.
 

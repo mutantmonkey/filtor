@@ -199,7 +199,7 @@ class TorControlProxyServer(asyncore.dispatcher):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Tor control port proxy")
+    parser = argparse.ArgumentParser(description="Whitelisting proxy for the Tor control port")
     parser.add_argument(
         "--port", "-p", default=9151, type=int,
         help="The TCP port to run the proxy on; default 9151")
