@@ -1,0 +1,11 @@
+[Unit]
+Description=Whitelisting proxy for the Tor control port
+After=tor.service
+
+[Service]
+User=filtor
+Type=simple
+ExecStart=/usr/bin/filtor
+
+[Install]
+WantedBy=multi-user.target
