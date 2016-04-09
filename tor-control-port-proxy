@@ -18,15 +18,16 @@ import socket
 class TorControlProxyHandler(asynchat.async_chat):
     authenticated = False
 
-    def __init__(self, control_socket, auth_cookie_path, socks_port=9150, *args, **kwargs):
+    def __init__(self, control_socket, auth_cookie_path, socks_port=9150, allow_add_onion=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.control_socket_path = control_socket
         self.auth_cookie_path = auth_cookie_path
         self.socks_port = socks_port
+        self.allow_add_onion = allow_add_onion
+
         self.ibuffer = []
         self.set_terminator(b"\n")
-
         self.control_socket = None
         self.proxy_authenticated = False
         self.control_authenticated = False
@@ -55,9 +56,9 @@ class TorControlProxyHandler(asynchat.async_chat):
             self.send_reply(250, 'closing connection')
             self.close()
         elif self.proxy_authenticated:
-            if command[0].lower() == 'add_onion':
+            if self.allow_add_onion and command[0].lower() == 'add_onion':
                 self.pass_message(' '.join(command))
-            elif command[0].lower() == 'del_onion':
+            elif self.allow_add_onion and command[0].lower() == 'del_onion':
                 self.pass_message(' '.join(command))
             elif command[0].lower() == 'getconf':
                 conf_key = self.get_next_argument(command)
@@ -174,12 +175,14 @@ class TorControlSocket(object):
 class TorControlProxyServer(asyncore.dispatcher):
     def __init__(self, host, port, socks_port,
                  control_socket="/run/tor/control",
-                 auth_cookie_path="/run/tor/control.authcookie"):
+                 auth_cookie_path="/run/tor/control.authcookie",
+                 allow_add_onion=False):
         super().__init__()
 
         self.socks_port = socks_port
         self.control_socket = control_socket
         self.auth_cookie_path = auth_cookie_path
+        self.allow_add_onion = allow_add_onion
 
         self.create_socket()
         self.set_reuse_addr()
@@ -191,6 +194,7 @@ class TorControlProxyServer(asyncore.dispatcher):
         handler = TorControlProxyHandler(self.control_socket,
                                          self.auth_cookie_path,
                                          self.socks_port,
+                                         self.allow_add_onion,
                                          sock)
 
 
@@ -202,8 +206,12 @@ if __name__ == '__main__':
     parser.add_argument(
         "--socksport", "-s", default=9150, type=int,
         help="The value for SocksPort to report to clients; default 9150")
+    parser.add_argument(
+        "--allow-add-onion", action='store_true',
+        help="Allow ADD_ONION and DEL_ONION commands. Note that someone can create a onion service that connects to your actual control port and bypass the filter.")
     args = parser.parse_args()
 
     server = TorControlProxyServer('0.0.0.0', args.port,
-                                   socks_port=args.socksport)
+                                   socks_port=args.socksport,
+                                   allow_add_onion=args.allow_add_onion)
     asyncore.loop()

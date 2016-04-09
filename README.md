@@ -46,3 +46,10 @@ the port.
    ```
 
 3. Start the proxy: `sudo systemctl start tor-control-port-proxy.service`.
+
+## Security Advisory
+Commit ad6a56520c8ae30d486200bb9c105c2de8b53fc3 introduced support for the
+`ADD_ONION` command without filtering the allowed ports. This was on by default
+and would allow an attacker to create an onion service for the actual control
+port and bypass the filter. This feature was disabled by default with commit FIXME and
+must be enabled with the `--allow-add-onion` argument.
