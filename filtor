@@ -11,6 +11,7 @@ import argparse
 import asyncore
 import asynchat
 import binascii
+import os
 import shlex
 import socket
 
@@ -57,7 +58,10 @@ class TorControlProxyHandler(asynchat.async_chat):
             self.close()
         elif self.proxy_authenticated:
             if self.allow_add_onion and command[0].lower() == 'add_onion':
-                self.pass_message(' '.join(command))
+                if self.add_onion_check(command) is False:
+                    self.pass_message(' '.join(command))
+                else:
+                    self.send_reply(512, 'Invalid VIRTPORT/TARGET')
             elif self.allow_add_onion and command[0].lower() == 'del_onion':
                 self.pass_message(' '.join(command))
             elif command[0].lower() == 'getconf':
@@ -120,6 +124,65 @@ class TorControlProxyHandler(asynchat.async_chat):
             return command[1]
         else:
             return ""
+
+    def blacklisted_targets(self):
+        """Collect a list of ports and socket paths in use for control purposes"""
+        targets = []
+        if self.control_socket is None:
+            self.create_control_socket()
+
+        if self.control_authenticated is False:
+            self.control_authenticated = self.authenticate()
+            if self.control_authenticated is False:
+                self.close()
+                return
+
+        raw_targets = self.control_socket.send_command('GETINFO net/listeners/control')
+        raw_targets = raw_targets.decode().split('\r\n')
+        for raw_target in raw_targets:
+            if raw_target[:3] == '250':
+                if '=' not in raw_target:
+                    continue
+                raw_target = raw_target[raw_target.find('=')+1:]
+                for target in raw_target[1:-1].split('" "'):
+                    targets.append(target)
+        return targets
+
+    def add_onion_targets(self, command):
+        """Returns a list of targets defined in multiple 'Port=' directives"""
+        targets = []
+        if self.control_socket is None:
+            self.create_control_socket()
+
+        if self.control_authenticated is False:
+            self.control_authenticated = self.authenticate()
+            if self.control_authenticated is False:
+                self.close()
+                return
+
+        for port in command:
+            if port[:5].lower() == 'port=':
+                port = port[5:]
+                port = port[port.find(',')+1:]
+                if ':' not in port:  # v4, not v6 or unix
+                    port = '{}:{}'.format('127.0.0.1', port)
+                targets.append(port)
+        for target in targets:
+            if target[:5].lower() == 'unix:':
+                path = target[5:]
+                if path != os.path.abspath(path):
+                    return None  # relative pathing!
+        return targets
+
+    def add_onion_check(self, command):
+        """Check that the target of the onion is not a control port. Blacklist hit returns true."""
+        blacklist = self.blacklisted_targets()
+        if blacklist is None:
+            return True  # something went wrong, fail closed
+        targets = self.add_onion_targets(command)
+        if targets is None:
+            return True  # something went wrong, fail closed
+        return bool(set(blacklist) & set(targets))
 
     def create_control_socket(self):
         self.control_socket = TorControlSocket(self.control_socket_path)
