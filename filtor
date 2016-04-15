@@ -52,7 +52,7 @@ class TorControlProxyHandler(asynchat.async_chat):
             self.proxy_authenticated = True
             self.send_reply(250, 'OK')
         elif command[0].lower() == 'protocolinfo':
-            self.pass_message(' '.join(command))
+            self.protocol_info(command)
         elif command[0].lower() == 'quit':
             self.send_reply(250, 'closing connection')
             self.close()
@@ -73,19 +73,7 @@ class TorControlProxyHandler(asynchat.async_chat):
                         552,
                         "Unrecognized configuration key \"{}\"".format(conf_key))
             elif command[0].lower() == 'getinfo':
-                info_key = self.get_next_argument(command)
-                if info_key == 'net/listeners/socks':
-                    # send a fake response to make TBB happy
-                    self.push('250-net/listeners/socks="{0}:{1}"\r\n'.format(
-                        self.socket.getsockname()[0],
-                        self.socks_port).encode('utf-8'))
-                    self.send_reply(250, 'OK')
-                elif info_key in ('status/bootstrap-phase', 'status/circuit-established'):
-                    self.pass_message('GETINFO {}'.format(info_key))
-                else:
-                    self.send_reply(
-                        510,
-                        'Unrecognized key "{}"'.format(info_key))
+                self.get_info(command[1:])
             elif command[0].lower() == 'setevents':
                 event_key = self.get_next_argument(command)
                 if event_key.lower() == 'status_client':
@@ -184,6 +172,62 @@ class TorControlProxyHandler(asynchat.async_chat):
             return True  # something went wrong, fail closed
         return bool(set(blacklist) & set(targets))
 
+    def get_info(self, infos):
+        response = ''
+
+        if self.control_socket is None:
+            self.create_control_socket()
+
+        if self.control_authenticated is False:
+            self.control_authenticated = self.authenticate()
+            if self.control_authenticated is False:
+                self.close()
+                return
+        for info in infos:
+            if info == 'net/listeners/socks':
+                response += '250-net/listeners/socks="{0}:{1}"\r\n'.format(
+                            self.socket.getsockname()[0],
+                            self.socks_port
+                        )
+            elif info in ('status/bootstrap-phase', 'status/circuit-established'):
+                lines = self.control_socket.send_command('GETINFO {0}'.format(info))
+                lines = lines.decode().strip().split('\r\n')
+                for line in lines:
+                    if line[:3] != '250':
+                        self.send_reply(
+                            510,
+                            'Unrecognized key "{}"'.format(info))
+                        return
+                    if line[:4] == '250-':
+                        response += '{}\r\n'.format(line)
+            else:
+                self.send_reply(
+                    510,
+                    'Unrecognized key "{}"'.format(info))
+                return
+
+        self.push(response.encode('utf-8'))
+        self.send_reply(250, "OK")
+
+    def protocol_info(self, command):
+        response = b''
+        if self.control_socket is None:
+            self.create_control_socket()
+
+        if self.control_authenticated is False:
+            self.control_authenticated = self.authenticate()
+            if self.control_authenticated is False:
+                self.close()
+                return
+
+        lines = self.control_socket.send_command(' '.join(command))
+        lines = lines.decode().strip().split('\r\n')
+        for line in lines:
+            if line[:8] == '250-AUTH':
+                line = '250-AUTH METHODS=NULL'
+            response += '{}\r\n'.format(line).encode('utf-8')
+        self.push(response)
+
     def create_control_socket(self):
         self.control_socket = TorControlSocket(self.control_socket_path)
 
@@ -272,9 +316,21 @@ if __name__ == '__main__':
     parser.add_argument(
         "--allow-add-onion", action='store_true',
         help="Allow ADD_ONION and DEL_ONION commands. Note that someone can create a onion service that connects to your actual control port and bypass the filter.")
+    parser.add_argument(
+        "--control-socket", "-c", default="/run/tor/control",
+        help="The path to the tor control socket; default /run/tor/control")
+    parser.add_argument(
+        "--auth-cookie", "-a", default="/run/tor/control.authcookie",
+        help="The path to the tor control auth cookie; default /run/tor/control.authcookie")
+    parser.add_argument(
+        "--bind-addr", "-b", default="0.0.0.0",
+        help="The address to bind the control port to; default 0.0.0.0")
     args = parser.parse_args()
 
-    server = TorControlProxyServer('0.0.0.0', args.port,
+    server = TorControlProxyServer(args.bind_addr,
+                                   args.port,
                                    socks_port=args.socksport,
-                                   allow_add_onion=args.allow_add_onion)
+                                   allow_add_onion=args.allow_add_onion,
+                                   control_socket=args.control_socket,
+                                   auth_cookie_path=args.auth_cookie)
     asyncore.loop()
