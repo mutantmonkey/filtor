@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-# Copyright © 2014-2016 mutantmonkey <mutantmonkey@mutantmonkey.in>
+# Copyright © 2014-2022 mutantmonkey <mutantmonkey@mutantmonkey.in>
 # This program is free software. It comes without any warranty, to
 # the extent permitted by applicable law. You can redistribute it
 # and/or modify it under the terms of the Do What The Fuck You Want
@@ -78,6 +78,11 @@ class TorControlProxyHandler(asynchat.async_chat):
                 event_key = self.get_next_argument(command)
                 if event_key.lower() == 'status_client':
                     self.pass_message('SETEVENTS STATUS_CLIENT')
+                elif event_key.lower() == 'stream':
+                    # we don't want to allow circuit status display, but Tor
+                    # Browser 11.0.6 requires SETEVENTS STREAM anyway, so do
+                    # nothing and pretend
+                    self.send_reply(250, "OK")
                 else:
                     self.send_reply(
                         552,
