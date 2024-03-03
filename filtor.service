@@ -1,5 +1,5 @@
 [Unit]
-Description=Whitelisting proxy for the Tor control port
+Description=Allowlisting proxy for the Tor control port
 After=tor.service
 
 [Service]

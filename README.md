@@ -1,6 +1,6 @@
 # filtor
 
-A whitelisting proxy for the Tor control port.
+An allowlisting proxy for the Tor control port.
 
 ## Rationale
 The Tor Browser, when not used in "Transparent Torification" mode, requires
